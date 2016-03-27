@@ -3,11 +3,12 @@
 
 import csv
 import datetime
-import server
+import subprocess
 
 from bottle import abort, request, route, run, template
 from easydict import EasyDict as ezdict
-from multiprocessing import Process
+
+command = 'python server.py'
 
 
 def params():
@@ -25,10 +26,6 @@ def params():
     return ezdict(p)
 
 
-def summon(args):
-    server.run()
-
-
 @route('/')
 def index():
     return 'Hello, world!'
@@ -38,8 +35,7 @@ def index():
 def receive():
     p = params()
 
-    proc = Process(target=summon, args=(p,))
-    proc.start()
+    subprocess.Popen(command.split(' '))
 
     result = ezdict()
 
