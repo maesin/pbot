@@ -35,9 +35,10 @@ def index():
 def receive():
     p = params()
 
-    subprocess.Popen(command.split(' '))
+    proc = subprocess.Popen(command.split(' '))
 
     result = ezdict()
+    result.pid = proc.pid
 
     return result
 
