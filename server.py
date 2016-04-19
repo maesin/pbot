@@ -1,5 +1,9 @@
+import array
+import base64
 import os
 import random
+import socket
+import struct
 import time
 
 try:
@@ -11,15 +15,73 @@ pid = os.getpid()
 
 print('start {0}'.format(pid))
 
-time.sleep(random.randint(4, 16))
 
-conn = HTTPConnection('d1oja6z4qyotti.cloudfront.net')
-conn.request('GET', '/server.json')
+def make_ws_data_frame(data):
+    FIN = 0x80
+    RSV1 = 0x0
+    RSV2 = 0x0
+    RSV3 = 0x0
+    OPCODE = 0x1
+    MASK = 0x80
+    payload = 0x0
 
-res = conn.getresponse()
+    frame = struct.pack('B', FIN | RSV1 | RSV2 | OPCODE)
+    data_len = len(data)
+    if data_len <= 125:
+        payload = struct.pack('B', MASK | data_len)
+    elif data_len < 0xFFFF:
+        payload = struct.pack('!BH', 126 | MASK, data_len)
+    else:
+        payload = struct.pack('!BQ', 127 | MASK, data_len)
 
-if res.status != 200:
-    print('error {0}: {1} {2}'.format(pid, res.status, res.reason))
+    frame += payload
+    masking_key = os.urandom(4)
+    mask_array = array.array('B', masking_key)
+    unmask_data = array.array('B', data.encode('UTF-8'))
+
+    for i in range(data_len):
+        unmask_data[i] = unmask_data[i] ^ masking_key[i % 4]
+
+    mask_data = unmask_data.tobytes()
+    frame += masking_key
+    frame += mask_data
+
+    return [frame, len(frame)]
 
 
-print('fin {0}'.format(pid))
+ws_upgrade_header = {
+    'Upgrade' : 'websocket',
+    'Connection' : 'Upgrade',
+    'Sec-WebSocket-Key' : base64.b64encode(os.urandom(16)).decode('UTF-8'),
+    'Sec-WebSocket-Version' : '13',
+}
+
+sock = socket.create_connection(['localhost', 8081])
+
+headers = "GET / HTTP/1.1\r\nHost: localhost\r\n"
+
+for key in ws_upgrade_header:
+    headers += key + ": " + ws_upgrade_header[key] + "\r\n"
+
+headers += "\r\n"
+
+print(headers)
+
+sock.send(headers.encode('UTF-8'))
+
+time.sleep(1)
+
+recv_buf = sock.recv(4096)
+print(recv_buf.decode('UTF-8'))
+
+time.sleep(1)
+
+try:
+  while True:
+    message, message_len = make_ws_data_frame('Hello')
+    sock.send(message)
+    time.sleep(random.randint(4, 16))
+except:
+  sock.close()
+  print('fin {0}'.format(pid))
+  raise
